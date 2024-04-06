@@ -8,11 +8,6 @@ import {
     inviteProjectMember,
     verifyInvitation,
     getProjectMembers,
-    addTask,
-    getTask,
-    addIssue,
-    getIssue,
-    updateMembers,
      } from "../controllers/project.js";
 import { verifyToken } from "../middleware/verifyToken.js";
 import { localVariables } from "../middleware/auth.js";
@@ -22,21 +17,26 @@ const router = express.Router();
 //create a project
 router.post("/createProject", verifyToken, addProject);   // done
 router.get("/:id", verifyToken, getProject)               // done
-router.put("/:id", verifyToken, updateProject)
-router.delete("/:id", verifyToken, deleteProject)
-router.patch("/member/:id", verifyToken, updateMembers)
-router.patch("/member/remove/:id", verifyToken, removeMember)
-router.post("/invite/:id", verifyToken, localVariables, inviteProjectMember)
-router.get("/invite/:code", verifyInvitation)
-router.get("/members/:id",verifyToken, getProjectMembers)
+router.put("/:id", verifyToken, updateProject)            // done
+router.delete("/:id", verifyToken, deleteProject)         // done
+router.post("/invite/:id", verifyToken, inviteProjectMember)    // done
+router.get("/invite/verify", verifyInvitation)                  // done
+router.patch("/member/remove/:id", verifyToken, removeMember)   //done
+router.get("/members/:id",verifyToken, getProjectMembers)       // done
 
 //works
-router.post("/task/:id", verifyToken, addTask)
-router.get("/task/:id", verifyToken, getTask)
+// router.post("/task/createTask/:id", verifyToken, addTask)
+// router.get("/task/getTask/:id", verifyToken, getTask)
+// router.get("/task/updateTask/:id", verifyToken, getTask)
+// router.get("/task/addMember/:id", verifyToken, getTask)
+// router.get("/task/removeMember/:id", verifyToken, getTask)
 
 // issues
-router.post("/isuues/:id", verifyToken, addIssue)
-router.get("/issues/:id", verifyToken, getIssue)
+// router.post("/isuues/createIssue/:id", verifyToken, addIssue)
+// router.get("/issues/getIssue/:id", verifyToken, getIssue)
+// router.get("/issues/updateIssue/:id", verifyToken, getIssue)
+// router.get("/issues/addMember/:id", verifyToken, getIssue)
+// router.get("/issues/RemoveMember/:id", verifyToken, getIssue)
 
 
 export default router;

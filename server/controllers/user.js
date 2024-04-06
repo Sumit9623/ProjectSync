@@ -6,17 +6,12 @@ import Issue from "../models/Issue.js"
 
 export const updateUser = async (req, res, next) =>
 {
-  if (req.params.id === req.user.id) {
-    try {
-      const updatedUser = await User.findByIdAndUpdate(req.params.id,{$set: req.body,},{ new: true });
-      res.status(200).json(updatedUser);
-    }
-    catch (err) {
-      next(createError(403, "Error while updating user"));
-    }
+  try {
+    const updatedUser = await User.findByIdAndUpdate(req.user.id,{$set: req.body,},{ new: true });
+    res.status(200).json(updatedUser);
   }
-  else {
-    return next(createError(403, "Can not update user"));
+  catch (err) {
+    next(createError(403, "Error while updating user"));
   }
 }
 
@@ -83,7 +78,9 @@ export const getUserIssues = async (req, res, next) => {
 
 //find project id from user and get it from projects collection and send it to client
 export const getUserProjects = async (req, res, next) => {
-  try {
+  try
+  {
+    console.log("I am in get projects");
     const user = await User.findById(req.user.id).populate("projects")
     const projects = []
     await Promise.all(user.projects.map(async (project) => {

@@ -1,3 +1,4 @@
+dotenv.config();
 import mongoose from "mongoose";
 import User from "../models/User.js";
 import bcrypt from "bcrypt";
@@ -10,21 +11,19 @@ import Works from "../models/Task.js";
 import otpGenerator from 'otp-generator';
 
 
-export const addProject = async (req, res, next) => {
+export const addProject = async (req, res, next) =>
+{
   const user = await User.findById(req.user.id);
   if (!user) {
     return next(createError(404, "User not found"));
   }
   try {
     const newProject = {...req.body};
+    newProject.creator = req.user.id;
     const pro = new Project(newProject)
-    pro.members.push({id:req.user.id, role : "admin", access:"edit"});
+    pro.members.push(req.user.id);
     const saveProject = await  pro.save();
-    User.findByIdAndUpdate(user.id, { $push: { projects: saveProject._id } }, { new: true }, (err, doc) => {
-      if (err) {
-        next(err);
-      }
-    });
+    User.findByIdAndUpdate(user.id, { $push: { "projects": saveProject._id } }, { new: true });
     res.status(200).json(saveProject);
   } catch (err) {
     next(err);
@@ -36,21 +35,31 @@ export const deleteProject = async (req, res, next) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return next(createError(404, "Project not found!"));
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id.toString() === req.user.id) {
-        if (project.members[i].access === "Owner") {
-          await project.delete();
-          User.findByIdAndUpdate(req.user.id, { $pull: { projects: req.params.id } }, { new: true }).exec();
-          for (let j = 0; j < project.members.length; j++) {
-            User.findByIdAndUpdate(project.members[j].id, { $pull: { projects: req.params.id } }, { new: true }).exec();
-          }
-          res.status(200).json("Project has been deleted...");
-        } else {
-          return next(createError(403, "You are not allowed to delete this project!"));
-        }
+    if(project.creator == req.user.id)
+    {
+      console.log(project);
+      const promise = new Promise((resolve,reject)=>{
+        project.members.forEach(async (member)=>{
+          await User.findByIdAndUpdate(
+            member._id,
+            {$pull:{"projects":project._id}},
+            {new:true}
+          )
+        })
+        resolve();
       }
+      )
+      promise.then(async ()=>
+      {
+        await Project.findByIdAndDelete(project._id);
+        console.log("Users project deleted");
+      })
+      res.status(200).send("Project Deleted");
     }
-
+    else
+    {
+      return next(createError(404, "You are not allowed to delete project"));
+    }
   } catch (err) {
     next(err);
   }
@@ -58,12 +67,15 @@ export const deleteProject = async (req, res, next) => {
 
 export const getProject = async (req, res, next) => {
   try {
-    const project = await Project.findById(req.params.id).populate("members.id", "_id  name email");
+    const project = await Project.findById(req.params.id).populate("members", "_id  name email");
+    console.log("I am in getProject");
     if(!project) return next(createError(403, "Project not found"));
     var verified = false
     await Promise.all(
       project.members.map(async (Member) => {
-        if (Member.id.id === req.user.id) {
+        console.log(Member._id);
+        console.log(req.user.id);
+        if (Member._id == req.user.id) {
           verified = true
         }
       })
@@ -86,112 +98,76 @@ export const updateProject = async (req, res, next) => {
   try {
     const project = await Project.findById(req.params.id);
     if (!project) return next(createError(404, "project not found!"));
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id.toString() === req.user.id.toString()) {
-        if (project.members[i].role === "admin" ||  project.members[i].access === "edit")
-        {
-          const updatedproject = await Project.findByIdAndUpdate(req.params.id,{$set: req.body,},{ new: true });
-          res.status(200).json({ message: "Project has been updated..." });
-        }
-        else {
-          return next(createError(403, "You are not allowed to update this project!"));
-        }
-      }
+    if(project.creator.toString()===req.user.id.toString())
+    {
+      console.log(project.creator);
+      console.log(req.user.id);
+      const updatedproject = await Project.findByIdAndUpdate(req.params.id,{$set: req.body,},{ new: true });
+      res.status(200).json({ message: "Project has been updated..." });
     }
-    return next(createError(403, "You can update only if you are a member of this project!"));
+    else
+    {
+      return next(createError(403, "Only project creator can update project"));
+    }
   } catch (err) {
     next(err);
   }
 };
 
 
-export const updateMembers = async (req, res, next) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    if (!project) return next(createError(404, "project not found!"));
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id.toString() === req.user.id.toString()) {
-        if (project.members[i].access === "Owner" || project.members[i].access === "Admin" || project.members[i].access === "Editor") {
-          //update single member inside members array
-          const updatedproject = await Project.findByIdAndUpdate(
-            req.params.id,
-            {
-              $set: {
-                "members.$[elem].access": req.body.access,
-                "members.$[elem].role": req.body.role,
-              },
-            },
-            {
-              arrayFilters: [{ "elem.id": req.body.id }],
-              new: true,
-            }
-          );
-          res.status(200).json({ message: "Member has been updated..." });
-        } else {
-          return next(createError(403, "You are not allowed to update this project!"));
-        }
-      }
-    }
-    return next(createError(403, "You can update only if you are a member of this project!"));
-
-  } catch (err) {
-    next(err);
-  }
-};
+// export const addMember = async (req, res, next) => {
+//   try
+//   {
+//     const project = await Project.findById(req.params.id);
+//     const user = await User.findById(req.user.id);
+//     console.log(project.creator);
+//     console.log(user._id);
+//     if(user && project && user._id.toString() == project.creator.toString())
+//     {
+//       if(!project.members.includes(req.body.member))
+//       {
+//         project.members.push(req.body.member);
+//         await project.save()
+//         res.status(200).send("Members Added project")
+//       }
+//       else res.status(200).send("already a Member")
+//     }
+//     else return next(createError(403, "You can update only if you are a member of this project!"));
+//   }
+//   catch (err) {
+//     next(err);
+//   }
+// };
 
 export const removeMember = async (req, res, next) => {
-  try {
+  try
+  {
     const project = await Project.findById(req.params.id);
+    const user = await User.findById(req.body.id)
     if (!project) return next(createError(404, "project not found!"));
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id.toString() === req.user.id.toString()) {
-        if (project.members[i].access === "Owner" || project.members[i].access === "Admin" || project.members[i].access === "Editor") {
+    if (!user) return next(createError(404, "User not found!"));
 
-          await Project.findByIdAndUpdate(
-            req.params.id,
-            {
-              $pull: {
-                //remove the meber with the id
-                members: { id: req.body.id }
-              }
-            },
-            {
-              new: true,
-            }
-          )
-            .exec();
-
-          await User.findByIdAndUpdate(
-            req.body.id,
-            {
-              $pull: {
-                projects: req.params.id,
-              }
-            },
-            {
-              new: true,
-            }
-          ).exec()
-            .then((user) => {
-              res.status(200).json({ message: "Member has been removed..." });
-
-            }).catch((err) => {
-            })
-
-        } else {
-          return next(createError(403, "You are not allowed to update this project!"));
+    if(req.user.id.toString() == project.creator.toString())
+    {
+        if(project.creator.toString() == req.body.id.toString())
+        {
+          res.status(403).send("cannot remove admin of project");
         }
-      }
+        else{
+          user.projects = user.projects.filter((projectid)=>{ return projectid != req.params.id});
+          project.members = project.members.filter((memberid)=>{return memberid != req.body.id});
+          await user.save()
+          await project.save();
+          res.status(200).send("member removed");
+        }
     }
-    return next(createError(403, "You can update only if you are a member of this project!"));
+    else return next(createError(403, "You are not allowed to remove member"));
 
   } catch (err) {
     next(err);
   }
 };
 
-
-dotenv.config();
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -204,101 +180,95 @@ const transporter = nodemailer.createTransport({
 });
 
 export const inviteProjectMember = async (req, res, next) => {
-  //send mail using nodemailer
+
   const user = await User.findById(req.user.id);
-  if (!user) {
-    return next(createError(404, "User not found"));
-  }
+  if (!user) return next(createError(404, "User not found"));
+
   const project = await Project.findById(req.params.id);
   if (!project) return next(createError(404, "Project not found!"));
 
-  req.app.locals.CODE = await otpGenerator.generate(8, { upperCaseAlphabets: true, specialChars: true, lowerCaseAlphabets: true, digits: true, });
-  dotenv.config();
-  const link = `${process.env.URL}/projects/invite/${req.app.locals.CODE}?projectid=${req.params.id}&userid=${req.body.id}&access=${req.body.access}&role=${req.body.role}`;
+  const token = jwt.sign({projectid : req.params.id, userid : req.body.id },process.env.JWT,{ expiresIn: "1d" });
+  const link = `${process.env.URL}project/invite/verify?token=${token}`;
+
   const mailBody = `
-  <div style="font-family: Poppins, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px; border: 1px solid #ccc; border-radius: 5px;">
-    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTDHQMmI5x5qWbOrEuJuFWkSIBQoT_fFyoKOKYqOSoIvQ&s" alt="VEXA Logo" style="display: block; margin: 0 auto; max-width: 200px; margin-bottom: 20px;">
-    <h1 style="font-size: 22px; font-weight: 500; color: #854CE6; text-align: center; margin-bottom: 30px;">Invitation to join a VEXA Project</h1>
-    <div style="background-color: #FFF; border: 1px solid #e5e5e5; border-radius: 5px; box-shadow: 0px 3px 6px rgba(0,0,0,0.05);">
-        <div style="background-color: #854CE6; border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 20px 0;">
-            <h2 style="font-size: 28px; font-weight: 500; color: #FFF; text-align: center; margin-bottom: 10px;"><b>${project.title}</b></h2>
-        </div>
-        <div style="padding: 30px;">
-            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">Hello ${req.body.name},</p>
-            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">You've been invited to join a project called <b>${project.title}</b> on VEXA by <b>${user.name}</b>.</p>
-            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">To accept the invitation and join the project, please click on the button below:</p>
-            <div style="text-align: center; margin-bottom: 30px;">
-                <a href=${link} style="background-color: #854CE6; color: #FFF; padding: 10px 20px; border-radius: 5px; text-decoration: none; font-weight: bold;">Accept Invitation</a>
+      <div style="font-family: Poppins, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px; border: 1px solid #ccc; border-radius: 5px;">
+        <img src="https://gdm-catalog-fmapi-prod.imgix.net/ProductLogo/833bf572-0ee5-47cc-8a27-5862fcab2d62.png" alt="ProjectSync Logo" style="display: block; margin: 0 auto; max-width: 200px; margin-bottom: 20px;">
+        <h1 style="font-size: 22px; font-weight: 500; color: #854CE6; text-align: center; margin-bottom: 30px;">Invitation to join a ProjectSync Project</h1>
+        <div style="background-color: #FFF; border: 1px solid #e5e5e5; border-radius: 5px; box-shadow: 0px 3px 6px rgba(0,0,0,0.05);">
+            <div style="padding: 30px;">
+                <p style="font-size: 16px; color: #666; margin-bottom: 20px;">Dear ${req.body.name},</p>
+                <p style="font-size: 14px; color: #666; margin-bottom: 20px;">You've been invited to join a project called <b>${project.title}</b> on ProjectSync by <b>${user.name}</b>.</p>
+                <p style="font-size: 14px; color: #666; margin-bottom: 20px;">To accept the invitation and join the project, please click on the button below:</p>
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <a href=${link} style="background-color: #854CE6; color: #FFF; padding: 10px 20px; border-radius: 5px; text-decoration: none; font-weight: bold;">Accept Invitation</a>
+                </div>
+                <p style="font-size: 14px; color: #666; margin-bottom: 20px;">If you have any questions or issues with joining the project, please contact  <b>${user.name}</b> for assistance.</p>
             </div>
-            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">If you have any questions or issues with joining the project, please contact  <b>${user.name}</b> for assistance.</p>
         </div>
+        <br>
+        <p style="font-size: 16px; color: #666; margin-top: 30px;">Best regards,</p>
+        <p style="font-size: 16px; color: #666; margin-bottom: 20px; text-align: center;">Best regards,<br>The ProjectSync Team</p>
     </div>
-    <br>
-    <p style="font-size: 16px; color: #666; margin-top: 30px;">Best regards,</p>
-    <p style="font-size: 16px; color: #666; margin-bottom: 20px; text-align: center;">Best regards,<br>The VEXA Team</p>
-</div>
-`
-
-  for (let i = 0; i < project.members.length; i++) {
-    if (project.members[i].id.toString() === req.user.id) {
-      if (project.members[i].access.toString() === "Owner" || project.members[i].access.toString() === "Admin" || project.members[i].access.toString() === "Editor") {
-        const mailOptions = {
-          from: process.env.EMAIL_USERNAME,
-          to: req.body.email,
-          subject: `Invitation to join project ${project.title}`,
-          html: mailBody
-        };
-        transporter.sendMail(mailOptions, (err,data) => {
-          if (err) {
-            return next(err);
-          } else {
-            return res.status(200).json({ message: "Email sent successfully" });
-          }
-        });
+    `
+  if(user._id.toString() == project.creator.toString())
+  {
+    console.log("I am in invite member ");
+    const mailOptions = {
+      from: process.env.EMAIL_USERNAME,
+      to: req.body.email,
+      subject: `Invitation to join project ${project.title}`,
+      html: mailBody
+    };
+    transporter.sendMail(mailOptions, (err,data) => {
+      if (err) {
+        return next(err);
       } else {
-        return next(createError(403, "You are not allowed to invite members to this project!"));
+        return res.status(200).json({ message: "Email sent successfully" });
       }
-    }
+    });
   }
-
+  else {
+    return next(createError(403, "You are not allowed to invite members to this project!"));
+  }
 };
 
 //verify invitation and add to project member
-export const verifyInvitation = async (req, res, next) => {
+export const verifyInvitation = async (req, res, next) =>
+{
   try {
-    const { projectid, userid, access, role } = req.query;
-    const code = req.params.code;
-    if (code === req.app.locals.CODE) {
-      req.app.locals.CODE = null;
-      req.app.locals.resetSession = true;
-      const project = await Project.findById(projectid);
-      if (!project) return next(createError(404, "Project not found!"));
-      const user = await User.findById(userid);
-      if (!user) {
-        return next(createError(404, "User not found"));
+     const {token} = req.query;
+     jwt.verify(token,process.env.JWT,async (err,obj)=>
+     {
+      if(err)
+      {
+        res.status(201).send("Invalid Lnk- Link Expired !" );
       }
-
-      for (let i = 0; i < project.members.length; i++) {
-        if (project.members[i].id === user.id) {
-          return next(createError(403, "You are already a member of this project!"));
-        }
-      }
-      const newMember = { id: user.id, role: role, access: access };
-      const updatedProject = await Project.findByIdAndUpdate(
-        projectid,
+      else
+      {
+        const {userid, projectid} = obj;
+        const project = await  Project.findById(projectid);
+        const user = await User.findById(userid);
+        if(user && project)
         {
-          $push: { members: newMember },
-        },
-        { new: true }
-      );
-      User.findByIdAndUpdate(user.id, { $push: { projects: updatedProject._id } }, { new: true }, (err, doc) => {
-        if (err) {
-          next(err);
+          if(!project.members.includes(userid))
+          {
+            project.members.push(userid);
+            await project.save()
+          }
+          if(!user.projects.includes(projectid))
+          {
+            user.projects.push(projectid);
+            await user.save();
+            res.status(200).send("Member added");
+          }
+          else{
+            res.status(200
+            ).send("Already a member of Project")
+         }
         }
-      });
-      res.status(200).json({ Message: "You have successfully joined the PROJECT!" });
-    }
-    return res.status(201).json({ Message: "Invalid Lnk- Link Expired !" });
+        else return next(createError(403, "You can update only if you are a member of this project!"));
+      }
+     });
   } catch (err) {
     next(err);
   }
@@ -307,74 +277,16 @@ export const verifyInvitation = async (req, res, next) => {
 
 export const getProjectMembers = async (req, res, next) => {
   try {
-    const project = await Project.findById(req.params.id);
+    const project = await Project.findById(req.params.id).populate("members","_id name email");
     if (!project) return next(createError(404, "Project not found!"));
-    res.status(200).json(project.members);
+    if(project.members.includes(req.user.id))
+    {
+        await team.populate("members","_id name email");
+        res.status(200).json(team.members);
+    }
+    else res.status(403).send('You are not allowed see members')
   } catch (err) {
     next(err);
   }
 }
 
-//add works to project
-export const addTask = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id);
-    const project = await Project.findById(req.params.id);
-    if (!project) return next(createError(404, "Project not found!"));
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id.toString() === req.user.id) {
-        if (project.members[i].access === "Owner" || project.members[i].access === "Admin" || project.members[i].access === "Editor") {
-
-          const newWork = new Works({
-            ...req.body,
-            title: req.body.title,
-            desc: req.body.desc,
-            priority: req.body.priority,
-            tags: req.body.tags,
-            projectId: project._id,
-            creatorId: user.id,
-          });
-          const work = await newWork.save();
-
-          //add the work id to the project
-          const updatedProject = await Project.findByIdAndUpdate(req.params.id,{$push: { works: work._id },},{ new: true })
-          res.status(200).json(updatedProject);
-        } else {
-          return res.status(403).send({
-            message: "You are not allowed to add works to this project"
-          });
-        }
-      }
-    }
-  } catch (err) {
-    next(err);
-  }
-};
-
-
-
-//work
-
-//get works
-export const getTask = async (req, res, next) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    if (!project) return next(createError(404, "Project not found!"));
-    const works = await Works
-
-      .find({ projectId: req.params.id })
-      .populate("creatorId", "name img")
-      .sort({ createdAt: -1 });
-    res.status(200).json(works);
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const addIssue = (req,res, next) =>{
-
-};
-
-export const getIssue = (req,res, next) =>{
-
-};

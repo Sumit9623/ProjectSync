@@ -5,13 +5,12 @@ import { verifyToken } from "../middleware/verifyToken.js";
 const router = express.Router();
 
 //update user
-router.get("/:id",verifyToken, getUserDetails);    // done
-router.put("/:id", verifyToken, updateUser);       // done
-router.delete("/:id", verifyToken, deleteUser);    // done
-router.get("/projects", verifyToken, getUserProjects);
+router.get("/projects", verifyToken, getUserProjects); //done
 router.get("/teams", verifyToken, getUserTeams);
 router.get("/issues", verifyToken, getUserIssues);
 router.get("/tasks", verifyToken, getUserTasks);
+router.get("/getUser",verifyToken, getUserDetails);    // done
+router.put("/updateUser/", verifyToken, updateUser);       // done
 router.get("/search/:email",verifyToken, findUserByEmail);
 
 
