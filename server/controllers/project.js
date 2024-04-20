@@ -281,8 +281,8 @@ export const getProjectMembers = async (req, res, next) => {
     if (!project) return next(createError(404, "Project not found!"));
     if(project.members.includes(req.user.id))
     {
-        await team.populate("members","_id name email");
-        res.status(200).json(team.members);
+        await project.populate("members","_id name email");
+        res.status(200).json(project.members);
     }
     else res.status(403).send('You are not allowed see members')
   } catch (err) {

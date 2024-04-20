@@ -9,8 +9,10 @@ import {
     verifyInvitation,
     getProjectMembers,
      } from "../controllers/project.js";
+
+import {addTask, getTask, updateTask, deleteTask, addTaskMember, removeTaskMember} from "../controllers/task.js";
+import { addIssue, getIssue, updateIssue, deleteIssue } from "../controllers/issue.js";
 import { verifyToken } from "../middleware/verifyToken.js";
-import { localVariables } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -25,18 +27,18 @@ router.patch("/member/remove/:id", verifyToken, removeMember)   //done
 router.get("/members/:id",verifyToken, getProjectMembers)       // done
 
 //works
-// router.post("/task/createTask/:id", verifyToken, addTask)
-// router.get("/task/getTask/:id", verifyToken, getTask)
-// router.get("/task/updateTask/:id", verifyToken, getTask)
-// router.get("/task/addMember/:id", verifyToken, getTask)
-// router.get("/task/removeMember/:id", verifyToken, getTask)
+router.post("/task/createTask/:id", verifyToken, addTask)     // done  --> date modification
+router.get("/task/getTask/:id", verifyToken, getTask)         // done
+router.patch("/task/updateTask/:id", verifyToken, updateTask)  // done
+router.delete("/task/deleteTask/:id", verifyToken, deleteTask) // done
+router.patch("/task/addMember/:id", verifyToken, addTaskMember)   // done
+router.patch("/task/removeMember/:id", verifyToken, removeTaskMember)   // done
 
 // issues
-// router.post("/isuues/createIssue/:id", verifyToken, addIssue)
-// router.get("/issues/getIssue/:id", verifyToken, getIssue)
-// router.get("/issues/updateIssue/:id", verifyToken, getIssue)
-// router.get("/issues/addMember/:id", verifyToken, getIssue)
-// router.get("/issues/RemoveMember/:id", verifyToken, getIssue)
+router.post("/issues/createIssue/:id", verifyToken, addIssue)  // done
+router.get("/issues/getIssue/:id", verifyToken, getIssue)      // done
+router.patch("/issues/updateIssue/:id", verifyToken, updateIssue)  // done
+router.delete("/issues/deleteIssue/:id", verifyToken, deleteIssue) // done
 
 
 export default router;

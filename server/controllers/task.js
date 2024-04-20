@@ -1,202 +1,184 @@
+dotenv.config();
 import mongoose from "mongoose";
 import User from "../models/User.js";
+import Task from "../models/Task.js";
+import Project from "../models/Project.js";
+
 import bcrypt from "bcrypt";
 import { createError } from "../error.js";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import dotenv from 'dotenv';
-import Works from "../models/Task.js";
 
 
-exports.addWork = async (req, res, next) => {
+export const addTask = async (req, res, next) => {
   const user = await User.findById(req.user.id);
-  if (!user) {
-    return next(createError(404, "User not found"));
-  }
-
-  const newWork = new Project({ members: [{ id: user.id, role: "d", access: "Owner" }], ...req.body });
-  try {
-    const saveProject = await (await newWork.save());
-    User.findByIdAndUpdate(user.id, { $push: { projects: saveProject._id } }, { new: true }, (err, doc) => {
-      if (err) {
-        next(err);
-      }
-    });
-    res.status(200).json(saveProject);
-  } catch (err) {
-    next(err);
-  }
-};
-
-
-
-exports.deleteProject = async (req, res, next) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    if (!project) return next(createError(404, "Project not found!"));
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id === req.user.id) {
-        if (project.members[i].access === "Owner") {
-          await project.delete();
-          User.findByIdAndUpdate(req.user.id, { $pull: { projects: req.params.id } }, { new: true }, (err, doc) => {
-            if (err) {
-              next(err);
-            }
-          });
-          res.status(200).json("Project has been deleted...");
-        } else {
-          return next(createError(403, "You are not allowed to delete this project!"));
-        }
-      }
-    }
-  } catch (err) {
-    next(err);
-  }
-};
-
-exports.getProject = async (req, res, next) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    const members = []
-    var verified = false
-    await Promise.all(
-      project.members.map(async (Member) => {
-        if (Member.id === req.user.id) {
-          verified = true
-        }
-        await User.findById(Member.id).then((member) => {
-          members.push({ id: member.id, role: Member.role, access: Member.access, name: member.name, img: member.img, email: member.email });
-        })
-      })
-    )
-      .then(() => {
-        if (verified) {
-          return res.status(200).json({ project, members });
-        } else {
-          return next(createError(403, "You are not allowed to view this project!"));
-        }
-      });
-
-  } catch (err) {
-    next(err);
-  }
-};
-
-
-exports.updateProject = async (req, res, next) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    if (!project) return next(createError(404, "project not found!"));
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id === req.user.id) {
-        if (project.members[i].access === "Owner" || project.members[i].access === "Admin" || project.members[i].access === "Editor") {
-          const updatedproject = await Project.findByIdAndUpdate(
-            req.params.id,
-            {
-              $set: req.body,
-            },
-            { new: true }
-          );
-          res.status(200).json(updatedproject);
-        } else {
-          return next(createError(403, "You are not allowed to update this project!"));
-        }
-      } else {
-        return next(createError(403, "You can update only if you are a member of this project!"));
-      }
-    }
-  } catch (err) {
-    next(err);
-  }
-};
-
-
-
-dotenv.config();
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USERNAME,
-    pass: process.env.EMAIL_PASSWORD
-  },
-  port: 465,
-  host: 'smtp.gmail.com'
-});
-
-exports.inviteProjectMember = async (req, res, next) => {
-  //send mail using nodemailer
-  const user = await User.findById(req.user.id);
-  if (!user) {
-    return next(createError(404, "User not found"));
-  }
-
   const project = await Project.findById(req.params.id);
-  if (!project) return next(createError(404, "Project not found!"));
-  for (let i = 0; i < project.members.length; i++) {
-    if (project.members[i].id === req.user.id) {
-      if (project.members[i].access === "Owner" || project.members[i].access === "Admin" || project.members[i].access === "Editor") {
+  if (!user) return next(createError(404, "User not found"));
+  if (!project) return next(createError(404, "Project not found"));
+  try
+  {
+    if(project.members.includes(user._id))
+    {
+      const newtask = new Task(req.body);
+      newtask.creator = req.user.id;
+      newtask.projectId = req.params.id;
+      await newtask.save();
 
-        const mailOptions = {
-          from: process.env.EMAIL,
-          to: req.body.email,
-          subject: "Invitation to join project",
-          text: `Hi ${req.body.name}, you have been invited to join project ${project.title} by ${user.name}. Please click on the link to join the project. http://localhost:8080/api/project/invite/${req.params.id}/${req.body.id}`,
-        };
-        transporter.sendMail(mailOptions, (err, data) => {
-          if (err) {
-            return next(err);
-          } else {
-            res.status(200).json({ message: "Email sent successfully" });
-          }
-        });
-      } else {
-        return next(createError(403, "You are not allowed to invite members to this project!"));
-      }
+      // start date and deadline are defult to date.now
+      // add this value from frontend
+
+      await User.findByIdAndUpdate(user.id, { $push: { "tasks": newtask._id } }, { new: true });
+      await Project.findByIdAndUpdate(req.params.id, { $push: { "tasks": newtask._id } }, { new: true });
+      res.status(200).json(newtask);
     }
+  } catch (err) {
+    next(err);
   }
 };
 
-//verify invitation and add to project member
-exports.verifyInvitation = async (req, res, next) => {
+export const getTask = async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  if (!user) return next(createError(404, "User not found"));
+  const task = await Task.findById(req.params.id);
+  if (!task) return next(createError(404, "taks not found"));
+  const project = await Project.findById(task.projectId);
+  if (!project) return next(createError(404, "Project not found"));
   try {
-    const project = await Project.findById(req.params.projectId);
-    if (!project) return next(createError(404, "Project not found!"));
-    const user = await User.findById(req.params.userId);
-    if (!user) {
-      return next(createError(404, "User not found"));
+    if(task && user && project.members.includes(req.user.id))
+    {
+        res.status(200).json(task);
     }
-    for (let i = 0; i < project.members.length; i++) {
-      if (project.members[i].id === user.id) {
-        return next(createError(403, "You are already a member of this project!"));
+    else res.status(403).send("You are not allowed to see task")
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateTask = async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  if (!user) return next(createError(404, "User not found"));
+  const task = await Task.findById(req.params.id);
+  if (!task) return next(createError(404, "Task not found"));
+  try {
+    if(user._id.toString() == task.creator.toString())
+    {
+      await Task.findByIdAndUpdate(task._id,{...req.body},{new:true});
+      res.status(200).send("Task Updated")
+    }
+    else res.status(403).send("You can not update Task")
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteTask = async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  if (!user) return next(createError(404, "User not found"));
+  const task = await Task.findById(req.params.id);
+  if (!task) return next(createError(404, "Task not found"));
+  const project = await Project.findById(task.projectId);
+  if (!project) return next(createError(404, "Task not found"));
+  try {
+    if(task.creator.toString() == req.user.id.toString())
+    {
+      const promise = new Promise(async (resolve,reject)=>{
+        task.members.forEach(async (member)=>{
+          await User.findByIdAndUpdate(
+            member._id,
+            {$pull:{"tasks":task._id}},
+            {new:true}
+          )
+        })
+        await Project.findByIdAndUpdate(
+          task.projectId,
+          {$pull:{"tasks":task._id}},
+          {new:true}
+        )
+        await User.findByIdAndUpdate(
+          task.creator,
+          {$pull:{"tasks":task._id}},
+          {new:true}
+        )
+
+        resolve();
       }
-    }
-    const newMember = { id: user.id, img: user.img, name: user.name, email: user.email, role: "d", access: "View Only" };
-    const updatedProject = await Project.findByIdAndUpdate(
-      req.params.projectId,
+      )
+      promise.then(async ()=>
       {
-        $push: { members: newMember },
-      },
-      { new: true }
-    );
-    User.findByIdAndUpdate(user.id, { $push: { projects: updatedProject._id } }, { new: true }, (err, doc) => {
-      if (err) {
-        next(err);
-      }
-    });
-    res.status(200).json(updatedProject);
+        await Task.findByIdAndDelete(task._id,{new:true});
+      }).then(()=>{
+          res.status(200).send("Task Deleted");
+      })
+    }
+    else res.status(403).send("You can not Delete Task")
+
   } catch (err) {
     next(err);
   }
 };
 
-
-exports.getProjectMembers = async (req, res, next) => {
-  try {
-    const project = await Project.findById(req.params.id);
-    if (!project) return next(createError(404, "Project not found!"));
-    res.status(200).json(project.members);
+export const addTaskMember = async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  if (!user) return next(createError(404, "User not found"));
+  const task = await Task.findById(req.params.id);
+  if(!task) return next(createError(404, "Task not found"));
+  try
+  {
+    console.log(user._id,task.creator);
+    if(user._id.toString() == task.creator.toString())
+    {
+      const user1 = await User.findById(req.body.id);
+      if(user1)
+      {
+        if(!task.members.includes(req.body.id)) task.members.push(req.body.id);
+        if(!user1.tasks.includes(task._id)) user1.tasks.push(task._id);
+        await task.save();
+        await user1.save();
+        res.status(200).send("Member Added");
+      }
+      else return next(createError(404, "User not found"));
+    }
+    else res.status(403).send("You are not allowed to add member")
   } catch (err) {
     next(err);
   }
-}
+};
+
+export const removeTaskMember = async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  if (!user) return next(createError(404, "User not found"));
+  const task = await Task.findById(req.params.id);
+  if(!task) return next(createError(404, "Task not found"));
+  try
+  {
+    if(user._id.toString() == task.creator.toString())
+    {
+      const user1 = await User.findById(req.body.id);
+      if(user1)
+      {
+        if(user1._id.toString() == task.creator.toString())
+        {
+          return next(createError(404, "Can not remove yourself"));
+        }
+        await User.findByIdAndUpdate(
+          user1._id,
+          {$pull:{"tasks":task._id}},
+          {new:true}
+        )
+
+        await Task.findByIdAndUpdate(
+          task._id,
+          {$pull:{"members":req.body.id}},
+          {new:true}
+        )
+
+        res.status(200).send("Member Deleted");
+      }
+      else return next(createError(404, "User not found"));
+    }
+  } catch (err) {
+    next(err);
+  }
+};

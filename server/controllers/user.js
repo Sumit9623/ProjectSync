@@ -51,26 +51,30 @@ export const getUserDetails = async (req, res, next) => {
 }
 
 export const getUserTasks = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id)
-    .populate('tasks')
-    .sort({ updatedAt: -1 });;
-    if (!user) return next(createError(404, "User not found!"));
-    //store all the works of the user in an array and send it to the client
-    const works = [];
-    await Promise.all(
-      user.works.map(async (work) => {
-        works.push(work);
-      })
-    ).then(() => {
-      res.status(200).json(works);
-    });
-  } catch (err) {
-    next(err);
+  try{
+    const user = await User.findById(req.user.id).populate("tasks")
+    res.status(200).json(user.tasks)
+  }
+  catch(err)
+  {
+    res.send(err)
   }
 };
 
 export const getUserIssues = async (req, res, next) => {
+  const user = await User.findById(req.user.id).populate("issues")
+    const issues = []
+    await Promise.all(user.issues.map(async (issue) => {
+      await Issue.findById(issue.id).then((issue) => {
+        issues.push(issue)
+      }).catch((err) => {
+        next(err)
+      })
+    })).then(() => {
+      res.status(200).json(issues)
+    }).catch((err) => {
+      next(err)
+    })
 
 };
 
@@ -123,12 +127,12 @@ export const getUserTeams = async (req, res, next) => {
 export const findUserByEmail = async (req, res, next) => {
   const email = req.params.email;
   try {
-    await User.find({ email: { $regex: email, $options: "i" } }).then((users) => {
+    await User.find({email: { $regex: email, $options: "i" }},{name:1,email:1}).then((users) => {
       if(users.length!=0)
       {
         res.status(200).json(users);
       }else{
-        res.status(201).json({message:"No user found"});
+        res.status(201).json({message:"User not found"});
       }
     }).catch((err) => {
       next(err)

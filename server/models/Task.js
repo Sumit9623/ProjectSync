@@ -8,8 +8,8 @@ const TaskSchema = new mongoose.Schema(
         desc: {type: String,required: true,unique: false,},
         tags: {type: [String],default: [],},
         status: {type: String,required: true,default: "Working",},
-        start_date: { type: String, required: true, default: "" },
-        end_date: { type: String, required: true, default: "" },
+        start_date: { type: Date, required: true, default: Date.now },
+        end_date: { type: Date, required: true, default: Date.now },
     },
     { timestamps: true }
 );

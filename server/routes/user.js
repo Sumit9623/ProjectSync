@@ -5,13 +5,13 @@ import { verifyToken } from "../middleware/verifyToken.js";
 const router = express.Router();
 
 //update user
-router.get("/projects", verifyToken, getUserProjects); //done
-router.get("/teams", verifyToken, getUserTeams);
-router.get("/issues", verifyToken, getUserIssues);
-router.get("/tasks", verifyToken, getUserTasks);
+router.get("/getProjects", verifyToken, getUserProjects); //done
+router.get("/getTeams", verifyToken, getUserTeams);       // done
+router.get("/getIssues", verifyToken, getUserIssues);     // done
+router.get("/getTasks", verifyToken, getUserTasks);       // done
 router.get("/getUser",verifyToken, getUserDetails);    // done
 router.put("/updateUser/", verifyToken, updateUser);       // done
-router.get("/search/:email",verifyToken, findUserByEmail);
+router.get("/search/:email",verifyToken, findUserByEmail);  // done
 
 
 
